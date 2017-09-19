@@ -634,7 +634,8 @@ func deserializeRoute(m []byte) (Route, error) {
 
 				_, ok = StrRouteMetrics[t]
 				if ok {
-					m := NewStrRouteMetric(t, string(v))
+					// expects NULL terminated string
+					m := NewStrRouteMetric(t, string(v[0:len(v)-1]))
 					route.StrMetrics = append(route.StrMetrics, m)
 				}
 				rest = buf
