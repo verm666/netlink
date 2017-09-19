@@ -6,7 +6,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/vishvananda/netlink/nl"
+	"github.com/verm666/netlink/nl"
 	"github.com/vishvananda/netns"
 )
 
@@ -55,6 +55,25 @@ func listFlags(flag int) []string {
 
 func (r *Route) ListFlags() []string {
 	return listFlags(r.Flags)
+}
+
+func (r *Route) ListMetrics() []string {
+	var metrics []string
+	for _, mx := range r.StrMetrics {
+		name, ok := RouteMetricNames[mx.Type]
+		if !ok {
+			name = fmt.Sprintf("%d", mx.Type)
+		}
+		metrics = append(metrics, fmt.Sprintf("%s: %s", name, mx.Value))
+	}
+	for _, mx := range r.IntMetrics {
+		name, ok := RouteMetricNames[mx.Type]
+		if !ok {
+			name = fmt.Sprintf("%d", mx.Type)
+		}
+		metrics = append(metrics, fmt.Sprintf("%s: %d", name, mx.Value))
+	}
+	return metrics
 }
 
 func (n *NexthopInfo) ListFlags() []string {
@@ -296,6 +315,45 @@ func (h *Handle) routeHandle(route *Route, req *nl.NetlinkRequest, msg *nl.RtMsg
 			buf = append(buf, rtnh.Serialize()...)
 		}
 		rtAttrs = append(rtAttrs, nl.NewRtAttr(syscall.RTA_MULTIPATH, buf))
+	}
+	if len(route.StrMetrics) > 0 || len(route.IntMetrics) > 0 {
+		buf := []byte{}
+		headerSize := 4
+
+		align := func(value []byte) []byte {
+			pads := (^len(value) + 1) & (syscall.NLMSG_ALIGNTO - 1)
+			for i := 0; i < pads; i++ {
+				value = append(value, 0)
+			}
+			return value
+		}
+
+		for _, m := range route.StrMetrics {
+			payloadSize := len(m.Value)
+			b := make([]byte, headerSize+payloadSize)
+
+			native.PutUint16(b[0:2], uint16(headerSize+payloadSize))
+			native.PutUint16(b[2:4], uint16(m.Type))
+
+			for i := 0; i < payloadSize; i++ {
+				offset := headerSize + i
+				b[offset] = m.Value[i]
+			}
+
+			b = align(b)
+			buf = append(buf, b...)
+		}
+
+		for _, m := range route.IntMetrics {
+			b := make([]byte, 8)
+
+			native.PutUint16(b[0:2], uint16(8))
+			native.PutUint16(b[2:4], uint16(m.Type))
+			native.PutUint32(b[4:8], uint32(m.Value))
+
+			buf = append(buf, b...)
+		}
+		rtAttrs = append(rtAttrs, nl.NewRtAttr(syscall.RTA_METRICS, buf))
 	}
 
 	if route.Table > 0 {
@@ -550,6 +608,35 @@ func deserializeRoute(m []byte) (Route, error) {
 					return route, err
 				}
 				route.MultiPath = append(route.MultiPath, info)
+				rest = buf
+			}
+		case syscall.RTA_METRICS:
+			parseRtNextMetric := func(value []byte) (RouteMetricType, []byte, []byte) {
+				mLen := int(native.Uint16(value[0:2]))
+				pads := (^mLen + 1) & (syscall.NLMSG_ALIGNTO - 1)
+
+				m := value[2:mLen]
+				mType := int(native.Uint16(m[0:2]))
+				mValue := m[2:]
+
+				return RouteMetricType(mType), mValue, value[mLen+pads:]
+			}
+
+			rest := attr.Value
+			for len(rest) > 0 {
+				t, v, buf := parseRtNextMetric(rest)
+
+				_, ok := IntRouteMetrics[t]
+				if ok {
+					m := NewIntRouteMetric(t, int(native.Uint32(v)))
+					route.IntMetrics = append(route.IntMetrics, m)
+				}
+
+				_, ok = StrRouteMetrics[t]
+				if ok {
+					m := NewStrRouteMetric(t, string(v))
+					route.StrMetrics = append(route.StrMetrics, m)
+				}
 				rest = buf
 			}
 		case nl.RTA_NEWDST:

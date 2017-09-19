@@ -8,7 +8,7 @@ import (
 	"net"
 	"syscall"
 
-	"github.com/vishvananda/netlink/nl"
+	"github.com/verm666/netlink/nl"
 )
 
 // ConntrackTableType Conntrack table for the netlink operation

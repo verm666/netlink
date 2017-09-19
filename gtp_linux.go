@@ -6,7 +6,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/vishvananda/netlink/nl"
+	"github.com/verm666/netlink/nl"
 )
 
 type PDP struct {

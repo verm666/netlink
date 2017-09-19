@@ -5,7 +5,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vishvananda/netlink/nl"
+	"github.com/verm666/netlink/nl"
 	"github.com/vishvananda/netns"
 )
 
