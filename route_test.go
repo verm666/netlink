@@ -368,15 +368,38 @@ func TestRouteExtraFields(t *testing.T) {
 	}
 
 	src := net.IPv4(127, 3, 3, 3)
+
+	intMetricToValue := map[RouteMetricType]int{}
+
+	for m := range IntRouteMetrics {
+		intMetricToValue[m] = len(intMetricToValue)
+	}
+
+	strMetricToValue := map[RouteMetricType]string{
+		RTAX_CC_ALGO: "highspeed",
+	}
+
+	var intMetrics []*IntRouteMetric
+	var strMetrics []*StrRouteMetric
+
+	for k, v := range intMetricToValue {
+		intMetrics = append(intMetrics, NewIntRouteMetric(k, v))
+	}
+	for k, v := range strMetricToValue {
+		strMetrics = append(strMetrics, NewStrRouteMetric(k, v))
+	}
+
 	route := Route{
-		LinkIndex: link.Attrs().Index,
-		Dst:       dst,
-		Src:       src,
-		Scope:     syscall.RT_SCOPE_LINK,
-		Priority:  13,
-		Table:     syscall.RT_TABLE_MAIN,
-		Type:      syscall.RTN_UNICAST,
-		Tos:       14,
+		LinkIndex:  link.Attrs().Index,
+		Dst:        dst,
+		Src:        src,
+		Scope:      syscall.RT_SCOPE_LINK,
+		Priority:   13,
+		Table:      syscall.RT_TABLE_MAIN,
+		Type:       syscall.RTN_UNICAST,
+		Tos:        14,
+		IntMetrics: intMetrics,
+		StrMetrics: strMetrics,
 	}
 	if err := RouteAdd(&route); err != nil {
 		t.Fatal(err)
@@ -410,6 +433,16 @@ func TestRouteExtraFields(t *testing.T) {
 	}
 	if routes[0].Tos != 14 {
 		t.Fatal("Invalid Tos. Route not added properly")
+	}
+	for _, m := range routes[0].IntMetrics {
+		if m.Value != intMetricToValue[m.Type] {
+			t.Fatalf("Metric %s not added properly.", RouteMetricNames[m.Type])
+		}
+	}
+	for _, m := range routes[0].StrMetrics {
+		if m.Value != strMetricToValue[m.Type] {
+			t.Fatalf("Metric %s not added properly.", RouteMetricNames[m.Type])
+		}
 	}
 }
 
